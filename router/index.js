@@ -202,27 +202,150 @@ router.get('/chapter', function (req, res) {
     const lection = req.query.lection || false;
     if (shortName) {
         const index = chapterData.findIndex(item => item.shortName == shortName);
-        if(index == -1){
-            res.status(400).send({error:'未找到对应数据'})
+        if (index == -1) {
+            res.status(400).send({ error: '未找到对应数据' })
         }
         res.send({
-            status:200,
-            data:chapterData[index]
+            status: 200,
+            data: chapterData[index]
         })
     } else if (lection) {
         const index = chapterData.findIndex(item => item.lection == lection);
-        if(index == -1){
-            res.status(400).send({error:'超出或未找到对应章节'})
+        if (index == -1) {
+            res.status(400).send({ error: '超出或未找到对应章节' })
         }
         res.send({
-            status:200,
-            data:chapterData[index]
+            status: 200,
+            data: chapterData[index]
         })
     } else {
         res.send({
             status: 200,
             data: chapterData
         })
+    }
+
+})
+
+// 查询指定内容
+router.get('/search', function (req, res) {
+
+    // 获取请求参数
+    const keyword = req.query.keyword && req.query.keyword.trim();
+    const scope = req.query.scope && req.query.scope.trim();
+
+    // 如果必填项为 空
+    if (!keyword) return res.status(400).send({ error: '请提供关键字' });
+
+    // 如果用户未设置范围
+    if (scope) {
+        // 获取指定书卷下标
+        const index = bibleCNData.findIndex(item => item.abbrev == scope);
+        // 若不存在 返回报错
+        if (index == -1) return res.status(400).send({ error: '未查到相关查询的圣经缩写' });
+
+        // 获取指定书卷内容
+        const bibleData_empty = bibleCNData[index].chapters;
+        // 去除空格 提高匹配成功率
+        const bibleData = bibleData_empty.map(node => node.map(str => str.replace(/\s/g, "")));
+
+        // 遍历每一章
+        const filterData = bibleData.map((item, index) => {
+
+            // 存放每次匹配到的小节的下标数组
+            const uindex = [];
+
+            // 遍历每一节
+            let data = item.filter((item, index) => {
+
+                // 判断文本是否存在关键字
+                const type = item.indexOf(keyword);
+
+                if (type !== -1) {
+                    uindex.push(index + 1);
+                    return true
+                } else {
+                    return false
+                }
+            })
+
+            // 将小节置入到匹配项中
+            data = data.map((item, index) => {
+                return {
+                    data: item,
+                    node: uindex[index]
+                }
+            })
+
+            // 如果该章存在匹配项
+            if (data.length) {
+                return {
+                    chapter: index + 1,
+                    data
+                }
+            } else {
+                return false
+            }
+        }).filter(item => item.data);
+
+        res.send({ status: 200, data: { lection: scope, data: filterData } })
+
+    } else {
+        // 去除空格 提高匹配成功率
+        const bibleData = bibleCNData.map(lection => lection.chapters.map(node => node.map(str => str.replace(/\s/g, ""))));
+
+        // 遍历经文
+
+        const filterData = bibleData.map((lection, index) => {
+
+            // 遍历章
+            const lectionData = lection.map((chapter, index2) => {
+
+                const uindex = [];
+
+                // 遍历节
+                let chapterData = chapter.filter((node, index3) => {
+
+                    // 判断文本是否存在关键字
+                    const type = node.indexOf(keyword);
+
+                    if (type !== -1) {
+                        uindex.push(index3);
+                        return true
+                    } else {
+                        return false
+                    }
+                })
+
+                chapterData = chapterData.map((item, index) => {
+                    return {
+                        node: uindex[index] + 1,
+                        data: item
+                    }
+                })
+
+
+                if (chapterData.length) {
+                    return {
+                        chapter: index2 + 1,
+                        data: chapterData
+                    }
+                } else {
+                    return false
+                }
+            }).filter(item => item.data)
+
+            if (lectionData.length) {
+                return {
+                    lection: bibleCNData[index].abbrev,
+                    data: lectionData
+                }
+            } else {
+                return false
+            }
+
+        }).filter(item => item.data)
+        res.send({ status: 200, data: filterData })
     }
 
 })
